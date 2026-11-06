@@ -1,21 +1,29 @@
 import {getCurrentWindow} from "@tauri-apps/api/window";
 import {FileInput, FilePlus2, FolderOpen, LoaderCircle} from "lucide-react";
 import {useCallback, useEffect, useRef, useState} from "react";
+import {ConfirmDialog} from "./components/ConfirmDialog";
 import {DocumentPane} from "./components/DocumentPane";
 import {PromptDialog} from "./components/PromptDialog";
+import {SettingsDialog} from "./components/SettingsDialog";
 import {Sidebar} from "./components/Sidebar";
 import {TabBar} from "./components/TabBar";
 import {Toast} from "./components/Toast";
 import {TopBar} from "./components/TopBar";
+import {WindowResizeHandles} from "./components/WindowResizeHandles";
 import {resolveMarkdownTarget} from "./lib/links";
+import {applyFontSettings, readFontSettings, saveFontSettings} from "./lib/appearance";
+import type {FontSettings} from "./lib/appearance";
 import {hasMarkdownFiles, parentPath} from "./lib/paths";
+import {isTheme, THEME_STORAGE_KEY} from "./lib/themes";
 import {
   createWorkspaceFile,
   createWorkspaceFolder,
-  deleteWorkspaceFile,
+  deleteWorkspaceEntry,
+  clearWorkspaceTrash,
   getWorkspace,
   isTauri,
   listTree,
+  onFileOpen,
   openWorkspace,
   pickFolderPath,
   pickMarkdownPath,
@@ -23,9 +31,13 @@ import {
   readWorkspaceFile,
   renameExternalFile,
   renameWorkspaceFile,
+  saveExternalFile,
+  saveWorkspaceFile,
+  takeStartupFiles,
 } from "./lib/storage";
 import type {
   DocKind,
+  DocSaver,
   EntryNode,
   FileDoc,
   FileMeta,
@@ -38,11 +50,18 @@ import type {
 } from "./types";
 
 const TABS_KEY = "md-editor:open-tabs";
-const THEME_KEY = "md-editor:theme";
+const OUTLINE_KEY = "md-editor:outline-open";
 
 interface TabSession {
   docs: {kind: DocKind; path: string; preview?: boolean}[];
   active: string | null;
+}
+
+type UnsavedChoice = "save" | "discard" | "cancel";
+
+interface UnsavedPrompt {
+  title: string;
+  message: string;
 }
 
 function makeId(): string {
@@ -97,28 +116,77 @@ export default function App() {
   const commitActiveId = useCallback((next: string | null) => {
     activeDocIdRef.current = next;
     setActiveDocId(next);
+    // 顶栏的保存状态跟着活动标签走：切到一个还没保存的标签，按钮要立刻可用
+    setSaveState(next !== null && dirtyIdsRef.current.has(next) ? "dirty" : "saved");
   }, []);
   const commitPreviewId = useCallback((next: string | null) => {
     previewTabIdRef.current = next;
     setPreviewTabId(next);
   }, []);
+  const markDirty = useCallback((ids: string[], dirty: boolean) => {
+    const current = dirtyIdsRef.current;
+    if (!ids.some((id) => current.has(id) !== dirty)) {
+      return;
+    }
+    const next = new Set(current);
+    ids.forEach((id) => {
+      if (dirty) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+    });
+    dirtyIdsRef.current = next;
+    setDirtyIds(next);
+  }, []);
+
+  const askUnsaved = useCallback(
+    (prompt: UnsavedPrompt) =>
+      new Promise<UnsavedChoice>((resolve) => {
+        unsavedResolverRef.current = resolve;
+        setUnsavedPrompt(prompt);
+      }),
+    [],
+  );
+
+  const dirtyOpenIds = useCallback(
+    () =>
+      openDocsRef.current.filter((doc) => dirtyIdsRef.current.has(doc.id)).map((doc) => doc.id),
+    [],
+  );
+
+  const answerUnsaved = useCallback((choice: UnsavedChoice) => {
+    setUnsavedPrompt(null);
+    const resolve = unsavedResolverRef.current;
+    unsavedResolverRef.current = null;
+    resolve?.(choice);
+  }, []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [outlineOpen, setOutlineOpen] = useState(false);
-  const [saveState, setSaveState] = useState<SaveState>("saved");
-  const [theme, setTheme] = useState<Theme>(() =>
-    document.documentElement.dataset.theme === "dark" ? "dark" : "light",
+  const [outlineOpen, setOutlineOpen] = useState(
+    () => localStorage.getItem(OUTLINE_KEY) === "1",
   );
+  const [saveState, setSaveState] = useState<SaveState>("saved");
+  const [theme, setTheme] = useState<Theme>(() => {
+    const applied = document.documentElement.dataset.theme;
+    return isTheme(applied) ? applied : "light";
+  });
+  const [fontSettings, setFontSettings] = useState<FontSettings>(readFontSettings);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [dirtyIds, setDirtyIds] = useState<Set<string>>(() => new Set());
+  const [unsavedPrompt, setUnsavedPrompt] = useState<UnsavedPrompt | null>(null);
   const [revealRequest, setRevealRequest] = useState<{path: string; nonce: number} | null>(null);
   const [createRequest, setCreateRequest] = useState<{
     type: "file" | "folder";
     parent: string | null;
   } | null>(null);
 
-  const flushRef = useRef<(() => Promise<void>) | null>(null);
+  const saveRef = useRef<DocSaver | null>(null);
   const busyRef = useRef(false);
+  const dirtyIdsRef = useRef<Set<string>>(dirtyIds);
+  const unsavedResolverRef = useRef<((choice: UnsavedChoice) => void) | null>(null);
   const liveContentRef = useRef(new Map<string, string>());
   const openChainRef = useRef<Promise<unknown>>(Promise.resolve());
   const enqueueOpen = useCallback((task: () => Promise<unknown>) => {
@@ -130,6 +198,72 @@ export default function App() {
   const notify = useCallback((text: string, kind: ToastKind = "info") => {
     setToast({id: Date.now() + Math.random(), kind, text});
   }, []);
+
+  const saveTabById = useCallback(
+    async (id: string): Promise<boolean> => {
+      if (!dirtyIdsRef.current.has(id)) {
+        return true;
+      }
+      if (id === activeDocIdRef.current && saveRef.current) {
+        await saveRef.current.save();
+        return !dirtyIdsRef.current.has(id);
+      }
+      const doc = openDocsRef.current.find((item) => item.id === id);
+      const content = liveContentRef.current.get(id);
+      if (!doc || content === undefined) {
+        markDirty([id], false);
+        return true;
+      }
+      try {
+        const meta =
+          doc.kind === "workspace"
+            ? await saveWorkspaceFile(doc.path, content, doc.frontmatter)
+            : await saveExternalFile(doc.path, content, doc.frontmatter);
+        commitDocs(
+          openDocsRef.current.map((item) => (item.id === id ? {...item, ...meta, content} : item)),
+        );
+        markDirty([id], false);
+        return true;
+      } catch (cause) {
+        notify(`保存失败：${errorMessage(cause)}`, "error");
+        return false;
+      }
+    },
+    [commitDocs, markDirty, notify],
+  );
+
+  // 只在显式动作（关标签 / 换工作区 / 退出）前调用，返回 false 表示这次操作应当中止
+  const guardUnsaved = useCallback(
+    async (ids: string[], title: string): Promise<boolean> => {
+      const pending = ids.filter((id) => dirtyIdsRef.current.has(id));
+      if (pending.length === 0) {
+        return true;
+      }
+      const names = openDocsRef.current
+        .filter((doc) => pending.includes(doc.id))
+        .map((doc) => `「${doc.title}」`);
+      const message =
+        pending.length === 1
+          ? `${names[0]} 有未保存的修改。`
+          : `${pending.length} 个文件有未保存的修改：${names.join("、")}。`;
+      const choice = await askUnsaved({title, message});
+      if (choice === "cancel") {
+        return false;
+      }
+      if (choice === "discard") {
+        pending.forEach((id) => liveContentRef.current.delete(id));
+        markDirty(pending, false);
+        return true;
+      }
+      for (const id of pending) {
+        if (!(await saveTabById(id))) {
+          return false;
+        }
+      }
+      return true;
+    },
+    [askUnsaved, markDirty, saveTabById],
+  );
 
   const dismissToast = useCallback(() => setToast(null), []);
 
@@ -155,8 +289,6 @@ export default function App() {
       if (preview) {
         commitPreviewId(doc.id);
       }
-      setOutlineOpen(false);
-      setSaveState("saved");
     },
     [commitActiveId, commitDocs, commitPreviewId],
   );
@@ -173,74 +305,99 @@ export default function App() {
         const index = current.findIndex((doc) => doc.id === activeId);
         const next = remaining[index - 1] ?? remaining[index] ?? null;
         commitActiveId(next ? next.id : null);
-        setOutlineOpen(false);
-        setSaveState("saved");
       }
       if (previewTabIdRef.current !== null && ids.includes(previewTabIdRef.current)) {
         commitPreviewId(null);
       }
       commitDocs(remaining);
       ids.forEach((id) => liveContentRef.current.delete(id));
+      markDirty(ids, false);
     },
-    [commitActiveId, commitDocs, commitPreviewId],
+    [commitActiveId, commitDocs, commitPreviewId, markDirty],
+  );
+
+  const reorderTabs = useCallback(
+    (fromId: string, toIndex: number) => {
+      const current = openDocsRef.current;
+      const from = current.findIndex((doc) => doc.id === fromId);
+      if (from === -1) {
+        return;
+      }
+      const target = Math.max(0, Math.min(current.length - 1, toIndex));
+      if (target === from) {
+        return;
+      }
+      const next = [...current];
+      const [moved] = next.splice(from, 1);
+      next.splice(target, 0, moved);
+      commitDocs(next);
+    },
+    [commitDocs],
   );
 
   const activateTab = useCallback(
-    async (id: string) => {
+    (id: string) => {
       if (id === activeDocIdRef.current) {
         return;
       }
-      await flushRef.current?.();
+      // 手动保存：切标签只换活动文档，未保存的内容留在内存里，不写盘
       commitActiveId(id);
-      setOutlineOpen(false);
-      setSaveState("saved");
     },
     [commitActiveId],
   );
 
+  const promoteTab = useCallback(
+    (id: string) => {
+      // 双击预览标签：清除预览标记，之后单击别的文件不会再顶掉它
+      if (previewTabIdRef.current === id) {
+        commitPreviewId(null);
+      }
+    },
+    [commitPreviewId],
+  );
+
   const closeTab = useCallback(
     async (id: string) => {
-      await flushRef.current?.();
+      if (!(await guardUnsaved([id], "关闭前保存？"))) {
+        return;
+      }
       removeTabs([id]);
     },
-    [removeTabs],
+    [guardUnsaved, removeTabs],
   );
 
   const cycleTab = useCallback(
-    async (delta: number) => {
+    (delta: number) => {
       const docs = openDocsRef.current;
       if (docs.length < 2) {
         return;
       }
       const index = docs.findIndex((doc) => doc.id === activeDocIdRef.current);
-      await activateTab(docs[(index + delta + docs.length) % docs.length].id);
+      activateTab(docs[(index + delta + docs.length) % docs.length].id);
     },
     [activateTab],
   );
 
   const openWorkspacePath = useCallback(
-    async (path: string, options: {skipFlush?: boolean; preview?: boolean} = {}) => {
-      const {skipFlush = false, preview = false} = options;
+    async (path: string, options: {preview?: boolean} = {}) => {
+      const {preview = false} = options;
       const findExisting = () =>
         openDocsRef.current.find((doc) => doc.kind === "workspace" && doc.path === path) ?? null;
-      const reuse = async (tab: OpenDoc) => {
+      const reuse = (tab: OpenDoc) => {
         if (!preview && tab.id === previewTabIdRef.current) {
           commitPreviewId(null);
         }
-        await activateTab(tab.id);
+        activateTab(tab.id);
       };
       const existing = findExisting();
       if (existing) {
-        await reuse(existing);
+        reuse(existing);
         return;
-      }
-      if (!skipFlush) {
-        await flushRef.current?.();
       }
       const doc = await readWorkspaceFile(path);
       const openedByEarlierTask = findExisting();
       if (openedByEarlierTask) {
-        await reuse(openedByEarlierTask);
+        reuse(openedByEarlierTask);
         return;
       }
       const previewTab = preview
@@ -256,23 +413,50 @@ export default function App() {
 
   const openPath = useCallback(
     async (path: string) => {
-      await flushRef.current?.();
       const doc = await readExternalFile(path);
       if (doc.workspacePath) {
-        await openWorkspacePath(doc.workspacePath, {skipFlush: true});
+        await openWorkspacePath(doc.workspacePath);
         return;
       }
       const existing = openDocsRef.current.find(
         (item) => item.kind === "external" && item.path === doc.path,
       );
       if (existing) {
-        await activateTab(existing.id);
+        activateTab(existing.id);
         return;
       }
       pushTab(makeOpenDoc(doc, "external"));
     },
     [activateTab, openWorkspacePath, pushTab],
   );
+
+  const openPathRef = useRef(openPath);
+  openPathRef.current = openPath;
+
+  const openPathQueued = useCallback(
+    (path: string) =>
+      enqueueOpen(() => openPathRef.current(path)).catch((cause) =>
+        notify(errorMessage(cause), "error"),
+      ),
+    [enqueueOpen, notify],
+  );
+
+  // 双击 .md / 「打开方式」启动时，文件路径在命令行参数里，由 Rust 侧暂存
+  const drainStartupFiles = useCallback(async () => {
+    if (!isTauri()) {
+      return;
+    }
+    let files: string[] = [];
+    try {
+      files = await takeStartupFiles();
+    } catch (cause) {
+      console.error(cause);
+      return;
+    }
+    for (const path of files) {
+      await openPathQueued(path);
+    }
+  }, [openPathQueued]);
 
   const openExternalFlow = useCallback(async () => {
     if (busyRef.current) {
@@ -354,13 +538,14 @@ export default function App() {
       if (!path) {
         return;
       }
-      await flushRef.current?.();
+      if (!(await guardUnsaved(dirtyOpenIds(), "切换工作区前保存？"))) {
+        return;
+      }
       const info = await openWorkspace(path);
       const nodes = await listTree();
       setWorkspace(info);
       setTree(nodes);
       setError("");
-      setOutlineOpen(false);
       setSaveState("saved");
       await restoreTabs(info);
     } catch (cause) {
@@ -368,7 +553,7 @@ export default function App() {
     } finally {
       busyRef.current = false;
     }
-  }, [notify, restoreTabs]);
+  }, [dirtyOpenIds, guardUnsaved, notify, restoreTabs]);
 
   const handleOpenFile = useCallback(
     (path: string, preview: boolean) => {
@@ -393,7 +578,7 @@ export default function App() {
   );
 
   const handleSaved = useCallback(
-    (meta: FileMeta) => {
+    (meta: FileMeta, content: string) => {
       commitDocs(
         openDocsRef.current.map((doc) =>
           doc.id === activeDocIdRef.current && doc.path === meta.path
@@ -402,12 +587,20 @@ export default function App() {
                 title: meta.title,
                 dir: meta.dir,
                 modifiedAt: meta.modifiedAt,
+                content,
               }
             : doc,
         ),
       );
     },
     [commitDocs],
+  );
+
+  const handleDirtyChange = useCallback(
+    (id: string, dirty: boolean) => {
+      markDirty([id], dirty);
+    },
+    [markDirty],
   );
 
   const handleRename = useCallback(
@@ -459,7 +652,6 @@ export default function App() {
     if (!createRequest || !workspace) {
       throw new Error("请先打开一个文件夹作为工作区");
     }
-    await flushRef.current?.();
     if (createRequest.type === "file") {
       const doc = await createWorkspaceFile(createRequest.parent, value);
       pushTab(makeOpenDoc(doc, "workspace"));
@@ -481,14 +673,18 @@ export default function App() {
     }
   };
 
-  const handleDeleteFile = useCallback(
+  const handleDeleteEntry = useCallback(
     async (path: string) => {
       try {
-        await flushRef.current?.();
-        await deleteWorkspaceFile(path);
+        await deleteWorkspaceEntry(path);
+        // 删文件夹会连带里面的文件，按路径前缀把受影响的标签一起关掉
         removeTabs(
           openDocsRef.current
-            .filter((doc) => doc.kind === "workspace" && doc.path === path)
+            .filter(
+              (doc) =>
+                doc.kind === "workspace" &&
+                (doc.path === path || doc.path.startsWith(`${path}/`)),
+            )
             .map((doc) => doc.id),
         );
         try {
@@ -496,7 +692,7 @@ export default function App() {
         } catch (cause) {
           console.error(cause);
         }
-        notify("文件已移动到工作区的 .trash 目录");
+        notify("已移动到工作区的 .trash 目录");
       } catch (cause) {
         notify(errorMessage(cause), "error");
       }
@@ -504,14 +700,41 @@ export default function App() {
     [notify, refreshTree, removeTabs],
   );
 
+  const handleClearTrash = useCallback(() => {
+    void (async () => {
+      try {
+        const removed = await clearWorkspaceTrash();
+        notify(removed > 0 ? `已永久删除 ${removed} 项` : "回收站已经是空的");
+      } catch (cause) {
+        notify(errorMessage(cause), "error");
+      }
+    })();
+  }, [notify]);
+
   const handleRefresh = useCallback(() => {
     void refreshTree().catch((cause) => notify(errorMessage(cause), "error"));
   }, [notify, refreshTree]);
 
+  const handleSaveClick = useCallback(() => {
+    const id = activeDocIdRef.current;
+    if (id !== null) {
+      void saveTabById(id);
+    }
+  }, [saveTabById]);
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem(THEME_KEY, theme);
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
+
+  useEffect(() => {
+    applyFontSettings(fontSettings);
+    saveFontSettings(fontSettings);
+  }, [fontSettings]);
+
+  useEffect(() => {
+    localStorage.setItem(OUTLINE_KEY, outlineOpen ? "1" : "0");
+  }, [outlineOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -539,11 +762,15 @@ export default function App() {
           setLoading(false);
         }
       }
+      // 恢复完标签再处理「打开方式」传进来的文件，否则会被 restoreTabs 覆盖掉
+      if (!cancelled) {
+        await drainStartupFiles();
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [restoreTabs]);
+  }, [drainStartupFiles, restoreTabs]);
 
   useEffect(() => {
     if (!workspace) {
@@ -560,6 +787,30 @@ export default function App() {
     });
   }, [activeDocId, openDocs, previewTabId, workspace]);
 
+  // 已运行时再从资源管理器「打开方式」启动，第二个实例会把路径转交给本实例
+  useEffect(() => {
+    if (!isTauri()) {
+      return;
+    }
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    void onFileOpen((path) => {
+      if (!disposed) {
+        void openPathQueued(path);
+      }
+    }).then((unlisten) => {
+      if (disposed) {
+        unlisten();
+      } else {
+        stop = unlisten;
+      }
+    });
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  }, [openPathQueued]);
+
   useEffect(() => {
     if (!isTauri()) {
       return;
@@ -575,11 +826,11 @@ export default function App() {
         }
         event.preventDefault();
         closing = true;
-        try {
-          await flushRef.current?.();
-        } finally {
-          await appWindow.destroy();
+        if (!(await guardUnsaved(dirtyOpenIds(), "退出前保存？"))) {
+          closing = false;
+          return;
         }
+        await appWindow.destroy();
       })
       .then((stop) => {
         if (disposed) {
@@ -592,13 +843,13 @@ export default function App() {
       disposed = true;
       unlisten?.();
     };
-  }, []);
+  }, [dirtyOpenIds, guardUnsaved]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Tab" && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();
-        void cycleTab(event.shiftKey ? -1 : 1);
+        cycleTab(event.shiftKey ? -1 : 1);
         return;
       }
       if (!(event.metaKey || event.ctrlKey)) {
@@ -641,13 +892,13 @@ export default function App() {
         workspace={workspace}
         activeDoc={activeDoc}
         saveState={saveState}
-        theme={theme}
         outlineOpen={outlineOpen}
         onToggleSidebar={() => setSidebarOpen((open) => !open)}
         onToggleOutline={() => setOutlineOpen((open) => !open)}
-        onToggleTheme={() => setTheme((current) => (current === "light" ? "dark" : "light"))}
+        onOpenSettings={() => setSettingsOpen(true)}
         onOpenWorkspace={() => void openWorkspaceFlow()}
         onOpenExternal={() => void openExternalFlow()}
+        onSave={handleSaveClick}
       />
       <div className="app__body">
         {sidebarOpen ? (
@@ -661,7 +912,8 @@ export default function App() {
             onOpenExternal={() => void openExternalFlow()}
             onOpenFile={handleOpenFile}
             onRequestCreate={requestCreate}
-            onDeleteFile={(path) => void handleDeleteFile(path)}
+            onDeleteEntry={(path) => void handleDeleteEntry(path)}
+            onClearTrash={handleClearTrash}
             onRefresh={handleRefresh}
           />
         ) : null}
@@ -670,9 +922,11 @@ export default function App() {
             docs={openDocs}
             activeId={activeDocId}
             previewId={previewTabId}
-            dirty={saveState !== "saved"}
-            onActivate={(id) => void activateTab(id)}
+            dirtyIds={dirtyIds}
+            onActivate={activateTab}
             onClose={(id) => void closeTab(id)}
+            onPromote={promoteTab}
+            onReorder={reorderTabs}
             onNewFile={() => requestCreate("file", null)}
           />
           {loading ? (
@@ -699,11 +953,12 @@ export default function App() {
               outlineOpen={outlineOpen}
               onCloseOutline={() => setOutlineOpen(false)}
               onSaved={handleSaved}
+              onDirtyChange={handleDirtyChange}
               onSaveStateChange={handleSaveStateChange}
               onRename={handleRename}
               onOpenLink={openLinkFlow}
               notify={notify}
-              flushRef={flushRef}
+              saveRef={saveRef}
               liveContent={liveContentRef.current}
             />
           ) : !workspace ? (
@@ -790,7 +1045,29 @@ export default function App() {
         onSubmit={submitCreate}
       />
 
+      <ConfirmDialog
+        open={unsavedPrompt !== null}
+        title={unsavedPrompt?.title ?? ""}
+        message={unsavedPrompt?.message ?? ""}
+        confirmLabel="保存"
+        altLabel="放弃修改"
+        onCancel={() => answerUnsaved("cancel")}
+        onAlt={() => answerUnsaved("discard")}
+        onConfirm={() => answerUnsaved("save")}
+      />
+
       <Toast message={toast} onClose={dismissToast} />
+      <SettingsDialog
+        open={settingsOpen}
+        theme={theme}
+        fontSettings={fontSettings}
+        onSelectTheme={setTheme}
+        onChangeFontSettings={(patch) =>
+          setFontSettings((current) => ({...current, ...patch}))
+        }
+        onClose={() => setSettingsOpen(false)}
+      />
+      <WindowResizeHandles />
     </div>
   );
 }

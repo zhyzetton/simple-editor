@@ -6,7 +6,7 @@
   padding-bottom: 8px;
   outline: none;
   color: var(--b3-theme-on-background);
-  font-family: var(--b3-font-family);
+  font-family: var(--b3-font-family-editor);
   font-size: var(--b3-font-size-editor);
   line-height: 1.625;
   font-variant-ligatures: no-common-ligatures;
@@ -15,11 +15,7 @@
 }
 
 .tiptap ::selection {
-  background: rgba(53, 117, 240, 0.22);
-}
-
-:root[data-theme="dark"] .tiptap ::selection {
-  background: rgba(53, 117, 240, 0.4);
+  background: var(--b3-selection-background);
 }
 
 .tiptap > p.is-editor-empty:first-child::before {
@@ -73,6 +69,30 @@
 
 .tiptap h6 {
   font-size: 1em;
+}
+
+.tiptap h1 {
+  color: var(--b3-heading-1);
+}
+
+.tiptap h2 {
+  color: var(--b3-heading-2);
+}
+
+.tiptap h3 {
+  color: var(--b3-heading-3);
+}
+
+.tiptap h4 {
+  color: var(--b3-heading-4);
+}
+
+.tiptap h5 {
+  color: var(--b3-heading-5);
+}
+
+.tiptap h6 {
+  color: var(--b3-heading-6);
 }
 
 .tiptap > :first-child {
@@ -210,6 +230,8 @@
   position: relative;
   margin: 2px 0;
   padding: 2px 4px 2px calc(0.25em + 10px);
+  border-radius: 4px;
+  background: var(--b3-blockquote-background);
   color: var(--b3-theme-on-surface);
 }
 
@@ -221,7 +243,7 @@
   bottom: 6px;
   width: 4px;
   border-radius: 6px;
-  background: var(--b3-theme-surface-lighter);
+  background: var(--b3-blockquote-border);
 }
 
 .tiptap blockquote p {
@@ -256,7 +278,7 @@
 }
 
 .tiptap li::marker {
-  color: var(--b3-theme-on-surface-light);
+  color: var(--b3-list-marker);
 }
 
 .tiptap li > p {
@@ -317,7 +339,7 @@
 .tiptap ul[data-type="taskList"] input[type="checkbox"]:checked {
   border-color: var(--b3-theme-primary);
   background-color: var(--b3-theme-primary);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+  background-image: var(--b3-task-check);
   background-position: center;
   background-repeat: no-repeat;
   background-size: 11px;
@@ -348,7 +370,7 @@
 .tiptap hr {
   margin: 21px 0;
   border: 0;
-  border-bottom: 1px solid var(--b3-theme-background-light);
+  border-bottom: 1px solid var(--b3-hr-color);
 }
 
 .tiptap img {
@@ -419,14 +441,17 @@
 .tiptap .tableWrapper {
   margin: 6px 0;
   overflow-x: auto;
+  /* 只允许横向滚动：overflow-x:auto 会让纵向也变成 auto，手柄哪怕溢出 2px 都会弹出滚动条，
+     12px 的滚动条会把表格挤窄，边界随即从鼠标下移开，形成手柄/滚动条来回切换的抖动 */
+  overflow-y: clip;
 }
 
 .tiptap table {
   width: 100%;
   margin: 0;
   border-collapse: separate;
-  border-top: 1px solid var(--b3-theme-surface-lighter);
-  border-left: 1px solid var(--b3-theme-surface-lighter);
+  border-top: 1px solid var(--b3-table-border);
+  border-left: 1px solid var(--b3-table-border);
   border-radius: var(--b3-border-radius-s);
   border-spacing: 0;
   table-layout: fixed;
@@ -438,12 +463,12 @@
   min-width: 40px;
   padding: 4px 8px;
   vertical-align: top;
-  border-right: 1px solid var(--b3-theme-surface-lighter);
-  border-bottom: 1px solid var(--b3-theme-surface-lighter);
+  border-right: 1px solid var(--b3-table-border);
+  border-bottom: 1px solid var(--b3-table-border);
 }
 
 .tiptap th {
-  background: var(--b3-table-even-background);
+  background: var(--b3-table-header-background);
   font-weight: 600;
   text-align: left;
 }
@@ -466,8 +491,8 @@
 .tiptap .column-resize-handle {
   position: absolute;
   top: 0;
-  right: -2px;
-  bottom: -2px;
+  right: 0;
+  bottom: 0;
   z-index: 3;
   width: 4px;
   background: var(--b3-theme-primary-light);
@@ -702,19 +727,19 @@
 
 .hljs-comment,
 .hljs-quote {
-  color: #6a737d;
+  color: var(--b3-code-comment);
   font-style: italic;
 }
 
 .hljs-keyword,
 .hljs-selector-tag,
 .hljs-doctag {
-  color: #d73a49;
+  color: var(--b3-code-keyword);
 }
 
 .hljs-string,
 .hljs-regexp {
-  color: #032f62;
+  color: var(--b3-code-string);
 }
 
 .hljs-number,
@@ -722,75 +747,40 @@
 .hljs-built_in,
 .hljs-type,
 .hljs-attr {
-  color: #005cc5;
+  color: var(--b3-code-number);
 }
 
 .hljs-title,
 .hljs-title.function_,
 .hljs-section {
-  color: #6f42c1;
+  color: var(--b3-code-title);
 }
 
 .hljs-variable,
 .hljs-template-variable,
 .hljs-params {
-  color: #e36209;
+  color: var(--b3-code-variable);
 }
 
 .hljs-tag,
 .hljs-name,
 .hljs-selector-class,
 .hljs-selector-id {
-  color: #22863a;
+  color: var(--b3-code-tag);
 }
 
 .hljs-meta {
-  color: #6a737d;
+  color: var(--b3-code-meta);
 }
 
-:root[data-theme="dark"] .hljs-comment,
-:root[data-theme="dark"] .hljs-quote {
-  color: #8b949e;
+/* 一级标题的主题化装饰：Catppuccin 用标题色下划线，Tokyo Night 用细分割线 */
+:root[data-theme="catppuccin-latte"] .tiptap h1,
+:root[data-theme="catppuccin-mocha"] .tiptap h1 {
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--b3-heading-1);
 }
 
-:root[data-theme="dark"] .hljs-keyword,
-:root[data-theme="dark"] .hljs-selector-tag,
-:root[data-theme="dark"] .hljs-doctag {
-  color: #ff7b72;
-}
-
-:root[data-theme="dark"] .hljs-string,
-:root[data-theme="dark"] .hljs-regexp {
-  color: #a5d6ff;
-}
-
-:root[data-theme="dark"] .hljs-number,
-:root[data-theme="dark"] .hljs-literal,
-:root[data-theme="dark"] .hljs-built_in,
-:root[data-theme="dark"] .hljs-type,
-:root[data-theme="dark"] .hljs-attr {
-  color: #79c0ff;
-}
-
-:root[data-theme="dark"] .hljs-title,
-:root[data-theme="dark"] .hljs-title.function_,
-:root[data-theme="dark"] .hljs-section {
-  color: #d2a8ff;
-}
-
-:root[data-theme="dark"] .hljs-variable,
-:root[data-theme="dark"] .hljs-template-variable,
-:root[data-theme="dark"] .hljs-params {
-  color: #ffa657;
-}
-
-:root[data-theme="dark"] .hljs-tag,
-:root[data-theme="dark"] .hljs-name,
-:root[data-theme="dark"] .hljs-selector-class,
-:root[data-theme="dark"] .hljs-selector-id {
-  color: #7ee787;
-}
-
-:root[data-theme="dark"] .hljs-meta {
-  color: #8b949e;
+:root[data-theme="tokyo-night"] .tiptap h1 {
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--b3-border-color);
 }

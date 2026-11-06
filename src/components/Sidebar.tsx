@@ -31,7 +31,8 @@ interface SidebarProps {
   onOpenExternal: () => void;
   onOpenFile: (path: string, preview: boolean) => void;
   onRequestCreate: (type: "file" | "folder", parent: string | null) => void;
-  onDeleteFile: (path: string) => void;
+  onDeleteEntry: (path: string) => void;
+  onClearTrash: () => void;
   onRefresh: () => void;
 }
 
@@ -64,7 +65,8 @@ export function Sidebar({
   onOpenExternal,
   onOpenFile,
   onRequestCreate,
-  onDeleteFile,
+  onDeleteEntry,
+  onClearTrash,
   onRefresh,
 }: SidebarProps) {
   const [filter, setFilter] = useState("");
@@ -75,7 +77,12 @@ export function Sidebar({
     y: number;
     items: ContextMenuItem[];
   } | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<{path: string; title: string} | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{
+    path: string;
+    title: string;
+    isDir: boolean;
+  } | null>(null);
+  const [confirmClearTrash, setConfirmClearTrash] = useState(false);
 
   useEffect(() => {
     setFilter("");
@@ -178,6 +185,17 @@ export function Sidebar({
         void revealInFolder(abs);
       },
     },
+    {
+      label: "删除文件夹",
+      icon: Trash2,
+      danger: true,
+      onSelect: () =>
+        setPendingDelete({
+          path: folder,
+          title: folder.split("/").filter(Boolean).pop() ?? folder,
+          isDir: true,
+        }),
+    },
   ];
 
   const fileMenu = (node: EntryNode): ContextMenuItem[] => [
@@ -185,7 +203,7 @@ export function Sidebar({
       label: "删除",
       icon: Trash2,
       danger: true,
-      onSelect: () => setPendingDelete({path: node.path, title: entryTitle(node.name)}),
+      onSelect: () => setPendingDelete({path: node.path, title: entryTitle(node.name), isDir: false}),
     },
   ];
 
@@ -193,6 +211,12 @@ export function Sidebar({
     {label: "打开其他文件夹…", icon: FolderOpen, onSelect: onOpenWorkspace},
     {label: "打开文件…", icon: FileInput, onSelect: onOpenExternal},
     {label: "刷新文件树", icon: RefreshCw, onSelect: onRefresh},
+    {
+      label: "清空回收站",
+      icon: Trash2,
+      danger: true,
+      onSelect: () => setConfirmClearTrash(true),
+    },
   ];
 
   const moreButton = (items: ContextMenuItem[]) => (
@@ -410,15 +434,32 @@ export function Sidebar({
       ) : null}
 
       <ConfirmDialog
+        open={confirmClearTrash}
+        title="清空回收站"
+        message="确定清空工作区的 .trash 目录吗？里面的文件和文件夹会被永久删除，无法恢复。"
+        confirmLabel="永久删除"
+        danger
+        onCancel={() => setConfirmClearTrash(false)}
+        onConfirm={() => {
+          setConfirmClearTrash(false);
+          onClearTrash();
+        }}
+      />
+
+      <ConfirmDialog
         open={pendingDelete !== null}
-        title="删除文件"
-        message={`确定删除「${pendingDelete?.title ?? ""}」吗？文件会被移动到工作区的 .trash 目录。`}
+        title={pendingDelete?.isDir ? "删除文件夹" : "删除文件"}
+        message={
+          pendingDelete?.isDir
+            ? `确定删除文件夹「${pendingDelete.title}」吗？它和里面的所有内容都会被移动到工作区的 .trash 目录。`
+            : `确定删除「${pendingDelete?.title ?? ""}」吗？文件会被移动到工作区的 .trash 目录。`
+        }
         confirmLabel="删除"
         danger
         onCancel={() => setPendingDelete(null)}
         onConfirm={() => {
           if (pendingDelete) {
-            onDeleteFile(pendingDelete.path);
+            onDeleteEntry(pendingDelete.path);
           }
           setPendingDelete(null);
         }}

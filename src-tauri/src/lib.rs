@@ -1,16 +1,18 @@
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
 
 struct AppState {
     settings_file: PathBuf,
     workspace: Mutex<Option<PathBuf>>,
+    startup_files: Mutex<Vec<String>>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -63,6 +65,57 @@ struct AssetInfo {
     absolute_path: String,
 }
 
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct SystemFont {
+    family: String,
+    aliases: Vec<String>,
+}
+
+static SYSTEM_FONT_CACHE: OnceLock<Vec<SystemFont>> = OnceLock::new();
+
+/// 扫描系统已安装字体，供设置页选择。fontdb 会读取 Windows 字体目录（含当前用户目录）。
+fn scan_system_fonts() -> Vec<SystemFont> {
+    let mut database = fontdb::Database::new();
+    database.load_system_fonts();
+    // key 用小写英文家族名去重，value 保留英文名和所有本地化别名
+    let mut families: BTreeMap<String, (String, BTreeSet<String>)> = BTreeMap::new();
+    for face in database.faces() {
+        let Some((family, _)) = face.families.first() else {
+            continue;
+        };
+        let family = family.trim();
+        if family.is_empty() {
+            continue;
+        }
+        let entry = families
+            .entry(family.to_lowercase())
+            .or_insert_with(|| (family.to_string(), BTreeSet::new()));
+        for (name, _) in &face.families {
+            let name = name.trim();
+            if !name.is_empty() {
+                entry.1.insert(name.to_string());
+            }
+        }
+    }
+    let mut result: Vec<SystemFont> = families
+        .into_values()
+        .map(|(family, aliases)| SystemFont {
+            family,
+            aliases: aliases.into_iter().collect(),
+        })
+        .collect();
+    result.sort_by(|a, b| a.family.to_lowercase().cmp(&b.family.to_lowercase()));
+    result
+}
+
+#[tauri::command]
+fn list_system_fonts() -> Vec<SystemFont> {
+    SYSTEM_FONT_CACHE
+        .get_or_init(scan_system_fonts)
+        .clone()
+}
+
 fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -97,6 +150,17 @@ fn is_markdown(path: &Path) -> bool {
             value.eq_ignore_ascii_case("md") || value.eq_ignore_ascii_case("markdown")
         })
         .unwrap_or(false)
+}
+
+/// 从命令行参数里挑出真实存在的 Markdown 文件——资源管理器「打开方式」会把文件路径追加到 exe 之后
+fn markdown_paths_from<I: IntoIterator<Item = String>>(args: I) -> Vec<String> {
+    args.into_iter()
+        .skip(1)
+        .filter(|arg| {
+            let path = Path::new(arg);
+            is_markdown(path) && path.is_file()
+        })
+        .collect()
 }
 
 fn split_frontmatter(raw: &str) -> (Option<String>, String) {
@@ -375,6 +439,15 @@ fn get_workspace(state: State<'_, AppState>) -> Option<WorkspaceInfo> {
 }
 
 #[tauri::command]
+fn take_startup_files(state: State<'_, AppState>) -> Vec<String> {
+    state
+        .startup_files
+        .lock()
+        .map(|mut files| std::mem::take(&mut *files))
+        .unwrap_or_default()
+}
+
+#[tauri::command]
 fn open_workspace(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -496,20 +569,46 @@ fn rename_workspace_file(
 }
 
 #[tauri::command]
-fn delete_workspace_file(state: State<'_, AppState>, path: String) -> Result<(), String> {
+fn delete_workspace_entry(state: State<'_, AppState>, path: String) -> Result<(), String> {
     let root = current_workspace(&state)?;
     let full = safe_join(&root, &path)?;
-    if !full.is_file() {
+    if full == root {
+        return Err("不能删除工作区根目录".to_string());
+    }
+    if !full.exists() {
         return Ok(());
     }
     let trash = root.join(".trash");
     fs::create_dir_all(&trash).map_err(|error| error.to_string())?;
-    let file_name = full
+    let name = full
         .file_name()
         .map(|value| value.to_string_lossy().to_string())
-        .unwrap_or_else(|| "document.md".to_string());
-    let target = unique_path(&trash, &format!("{}-{file_name}", now_ms()));
+        .unwrap_or_else(|| "entry".to_string());
+    let target = unique_path(&trash, &format!("{}-{name}", now_ms()));
     fs::rename(&full, target).map_err(|error| format!("删除失败：{error}"))
+}
+
+#[tauri::command]
+fn clear_workspace_trash(state: State<'_, AppState>) -> Result<u32, String> {
+    let root = current_workspace(&state)?;
+    let trash = root.join(".trash");
+    if !trash.is_dir() {
+        return Ok(0);
+    }
+    let mut removed = 0;
+    let entries = fs::read_dir(&trash).map_err(|error| format!("无法读取回收站：{error}"))?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let result = if path.is_dir() {
+            fs::remove_dir_all(&path)
+        } else {
+            fs::remove_file(&path)
+        };
+        if result.is_ok() {
+            removed += 1;
+        }
+    }
+    Ok(removed)
 }
 
 #[tauri::command]
@@ -603,7 +702,24 @@ fn import_asset(target_dir: String, source_path: String) -> Result<AssetInfo, St
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+
+    // 已经开着窗口时再从「打开方式」启动，新实例直接退出，把文件转交给当前实例
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+            for path in markdown_paths_from(args) {
+                let _ = app.emit("file-open", path);
+            }
+        }));
+    }
+
+    builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
@@ -642,11 +758,13 @@ pub fn run() {
             app.manage(AppState {
                 settings_file,
                 workspace: Mutex::new(workspace),
+                startup_files: Mutex::new(markdown_paths_from(std::env::args())),
             });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             get_workspace,
+            take_startup_files,
             open_workspace,
             list_tree,
             read_workspace_file,
@@ -654,12 +772,14 @@ pub fn run() {
             create_workspace_file,
             create_workspace_folder,
             rename_workspace_file,
-            delete_workspace_file,
+            delete_workspace_entry,
+            clear_workspace_trash,
             read_external_file,
             save_external_file,
             rename_external_file,
             save_asset,
-            import_asset
+            import_asset,
+            list_system_fonts
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

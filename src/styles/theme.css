@@ -41,10 +41,33 @@
   --b3-font-size-editor: 16px;
   --b3-font-family: BlinkMacSystemFont, Helvetica, "PingFang SC", "Luxi Sans", "DejaVu Sans",
     arial, "Microsoft Yahei", "Hiragino Sans GB", "Source Han Sans SC", "Noto Sans SC", sans-serif;
+  --b3-font-family-editor: var(--b3-font-family);
   --b3-font-family-code: "JetBrains Mono", "JetBrainsMono-Regular", mononoki, Consolas,
     "Liberation Mono", "Cascadia Code", monospace;
   --b3-highlight-color: #222;
   --b3-highlight-background: #ffff00;
+  --b3-selection-background: rgba(53, 117, 240, 0.22);
+  --b3-code-comment: #6a737d;
+  --b3-code-keyword: #d73a49;
+  --b3-code-string: #032f62;
+  --b3-code-number: #005cc5;
+  --b3-code-title: #6f42c1;
+  --b3-code-variable: #e36209;
+  --b3-code-tag: #22863a;
+  --b3-code-meta: #6a737d;
+  --b3-task-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23ffffff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+  --b3-heading-1: var(--b3-theme-on-background);
+  --b3-heading-2: var(--b3-theme-on-background);
+  --b3-heading-3: var(--b3-theme-on-background);
+  --b3-heading-4: var(--b3-theme-on-background);
+  --b3-heading-5: var(--b3-theme-on-background);
+  --b3-heading-6: var(--b3-theme-on-background);
+  --b3-list-marker: var(--b3-theme-on-surface-light);
+  --b3-blockquote-border: var(--b3-theme-surface-lighter);
+  --b3-blockquote-background: transparent;
+  --b3-table-header-background: var(--b3-table-even-background);
+  --b3-table-border: var(--b3-theme-surface-lighter);
+  --b3-hr-color: var(--b3-theme-background-light);
 }
 
 :root[data-theme="dark"] {
@@ -85,6 +108,202 @@
   --b3-table-even-background: rgba(255, 255, 255, 0.06);
   --b3-highlight-color: #222;
   --b3-highlight-background: #ffff00;
+  --b3-selection-background: rgba(53, 117, 240, 0.4);
+  --b3-code-comment: #8b949e;
+  --b3-code-keyword: #ff7b72;
+  --b3-code-string: #a5d6ff;
+  --b3-code-number: #79c0ff;
+  --b3-code-title: #d2a8ff;
+  --b3-code-variable: #ffa657;
+  --b3-code-tag: #7ee787;
+  --b3-code-meta: #8b949e;
+}
+
+:root[data-theme="catppuccin-latte"] {
+  color-scheme: light;
+  --b3-theme-primary: #1e66f5;
+  --b3-theme-primary-light: rgba(30, 102, 245, 0.54);
+  --b3-theme-primary-lighter: rgba(30, 102, 245, 0.38);
+  --b3-theme-primary-lightest: rgba(30, 102, 245, 0.12);
+  --b3-theme-secondary: #fe640b;
+  --b3-theme-background: #eff1f5;
+  --b3-theme-background-light: #dce0e8;
+  --b3-theme-surface: #e6e9ef;
+  --b3-theme-surface-light: rgba(230, 233, 239, 0.86);
+  --b3-theme-surface-lighter: #ccd0da;
+  --b3-theme-error: #d20f39;
+  --b3-theme-success: #40a02b;
+  --b3-theme-on-primary: #fff;
+  --b3-theme-on-secondary: #fff;
+  --b3-theme-on-background: #4c4f69;
+  --b3-theme-on-surface: #6c6f85;
+  --b3-theme-on-surface-light: rgba(108, 111, 133, 0.7);
+  --b3-theme-on-surface-lighter: #acb0be;
+  --b3-body-background: #dce0e8;
+  --b3-border-color: #ccd0da;
+  --b3-list-hover: rgba(76, 79, 105, 0.075);
+  --b3-list-icon-hover: rgba(76, 79, 105, 0.1);
+  --b3-scroll-color: rgba(76, 79, 105, 0.2);
+  --b3-empty-color: rgba(108, 111, 133, 0.62);
+  --b3-menu-background: #eff1f5;
+  --b3-dialog-shadow: 0 8px 24px rgba(76, 79, 105, 0.24);
+  --b3-point-shadow: 0 0 1px 0 rgba(76, 79, 105, 0.1), 0 0 2px 0 rgba(76, 79, 105, 0.2);
+  --b3-mask-background: rgba(220, 224, 232, 0.4);
+  --b3-protyle-code-background: rgba(76, 79, 105, 0.06);
+  --b3-protyle-inline-link-color: #1e66f5;
+  --b3-protyle-inline-mark-background: #df8e1d;
+  --b3-protyle-inline-mark-color: #4c4f69;
+  --b3-protyle-inline-blockref-color: #8839ef;
+  --b3-table-even-background: rgba(76, 79, 105, 0.04);
+  --b3-highlight-color: #4c4f69;
+  --b3-highlight-background: #f9e2af;
+  --b3-selection-background: rgba(30, 102, 245, 0.22);
+  --b3-code-comment: #8c8fa1;
+  --b3-code-keyword: #8839ef;
+  --b3-code-string: #40a02b;
+  --b3-code-number: #fe640b;
+  --b3-code-title: #1e66f5;
+  --b3-code-variable: #e64553;
+  --b3-code-tag: #179299;
+  --b3-code-meta: #9ca0b0;
+  --b3-heading-1: #8839ef;
+  --b3-heading-2: #1e66f5;
+  --b3-heading-3: #179299;
+  --b3-heading-4: #40a02b;
+  --b3-heading-5: #a16207;
+  --b3-heading-6: #c2410c;
+  --b3-list-marker: #8839ef;
+  --b3-blockquote-border: #8839ef;
+  --b3-blockquote-background: rgba(136, 57, 239, 0.05);
+  --b3-table-header-background: rgba(30, 102, 245, 0.08);
+  --b3-table-border: #ccd0da;
+  --b3-hr-color: #ccd0da;
+}
+
+:root[data-theme="catppuccin-mocha"] {
+  color-scheme: dark;
+  --b3-theme-primary: #89b4fa;
+  --b3-theme-primary-light: rgba(137, 180, 250, 0.64);
+  --b3-theme-primary-lighter: rgba(137, 180, 250, 0.44);
+  --b3-theme-primary-lightest: rgba(137, 180, 250, 0.14);
+  --b3-theme-secondary: #fab387;
+  --b3-theme-background: #1e1e2e;
+  --b3-theme-background-light: rgba(205, 214, 244, 0.1);
+  --b3-theme-surface: #181825;
+  --b3-theme-surface-light: rgba(24, 24, 37, 0.86);
+  --b3-theme-surface-lighter: rgba(205, 214, 244, 0.1);
+  --b3-theme-error: #f38ba8;
+  --b3-theme-success: #a6e3a1;
+  --b3-theme-on-primary: #11111b;
+  --b3-theme-on-secondary: #11111b;
+  --b3-theme-on-background: #cdd6f4;
+  --b3-theme-on-surface: #a6adc8;
+  --b3-theme-on-surface-light: rgba(205, 214, 244, 0.62);
+  --b3-theme-on-surface-lighter: rgba(205, 214, 244, 0.18);
+  --b3-body-background: #11111b;
+  --b3-border-color: #313244;
+  --b3-list-hover: rgba(205, 214, 244, 0.08);
+  --b3-list-icon-hover: rgba(205, 214, 244, 0.1);
+  --b3-scroll-color: rgba(205, 214, 244, 0.2);
+  --b3-empty-color: rgba(166, 173, 200, 0.62);
+  --b3-menu-background: #1e1e2e;
+  --b3-dialog-shadow: 0 8px 24px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(205, 214, 244, 0.1);
+  --b3-point-shadow: inset 0 0.5px 0.5px 0.5px rgba(255, 255, 255, 0.1),
+    0 3px 8px rgba(0, 0, 0, 0.3);
+  --b3-mask-background: rgba(17, 17, 27, 0.5);
+  --b3-protyle-code-background: rgba(205, 214, 244, 0.08);
+  --b3-protyle-inline-link-color: #89dceb;
+  --b3-protyle-inline-mark-background: #f9e2af;
+  --b3-protyle-inline-mark-color: #1e1e2e;
+  --b3-protyle-inline-blockref-color: #cba6f7;
+  --b3-table-even-background: rgba(205, 214, 244, 0.05);
+  --b3-highlight-color: #1e1e2e;
+  --b3-highlight-background: #f9e2af;
+  --b3-selection-background: rgba(137, 180, 250, 0.32);
+  --b3-code-comment: #6c7086;
+  --b3-code-keyword: #cba6f7;
+  --b3-code-string: #a6e3a1;
+  --b3-code-number: #fab387;
+  --b3-code-title: #89b4fa;
+  --b3-code-variable: #eba0ac;
+  --b3-code-tag: #94e2d5;
+  --b3-code-meta: #7f849c;
+  --b3-task-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%2311111b' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+  --b3-heading-1: color-mix(in srgb, #cba6f7 82%, #1e1e2e);
+  --b3-heading-2: color-mix(in srgb, #89b4fa 82%, #1e1e2e);
+  --b3-heading-3: color-mix(in srgb, #94e2d5 82%, #1e1e2e);
+  --b3-heading-4: color-mix(in srgb, #a6e3a1 82%, #1e1e2e);
+  --b3-heading-5: color-mix(in srgb, #f9e2af 82%, #1e1e2e);
+  --b3-heading-6: color-mix(in srgb, #fab387 82%, #1e1e2e);
+  --b3-list-marker: color-mix(in srgb, #cba6f7 86%, #1e1e2e);
+  --b3-blockquote-border: color-mix(in srgb, #cba6f7 86%, #1e1e2e);
+  --b3-blockquote-background: rgba(203, 166, 247, 0.04);
+  --b3-table-header-background: rgba(137, 180, 250, 0.08);
+  --b3-table-border: #313244;
+  --b3-hr-color: #313244;
+}
+
+:root[data-theme="tokyo-night"] {
+  color-scheme: dark;
+  --b3-theme-primary: #7aa2f7;
+  --b3-theme-primary-light: rgba(122, 162, 247, 0.64);
+  --b3-theme-primary-lighter: rgba(122, 162, 247, 0.44);
+  --b3-theme-primary-lightest: rgba(122, 162, 247, 0.14);
+  --b3-theme-secondary: #ff9e64;
+  --b3-theme-background: #1a1b26;
+  --b3-theme-background-light: rgba(192, 202, 245, 0.1);
+  --b3-theme-surface: #16161e;
+  --b3-theme-surface-light: rgba(22, 22, 30, 0.86);
+  --b3-theme-surface-lighter: rgba(192, 202, 245, 0.1);
+  --b3-theme-error: #f7768e;
+  --b3-theme-success: #9ece6a;
+  --b3-theme-on-primary: #1a1b26;
+  --b3-theme-on-secondary: #1a1b26;
+  --b3-theme-on-background: #c0caf5;
+  --b3-theme-on-surface: #a9b1d6;
+  --b3-theme-on-surface-light: rgba(192, 202, 245, 0.62);
+  --b3-theme-on-surface-lighter: rgba(192, 202, 245, 0.18);
+  --b3-body-background: #16161e;
+  --b3-border-color: #292e42;
+  --b3-list-hover: rgba(192, 202, 245, 0.08);
+  --b3-list-icon-hover: rgba(192, 202, 245, 0.1);
+  --b3-scroll-color: rgba(192, 202, 245, 0.2);
+  --b3-empty-color: rgba(169, 177, 214, 0.62);
+  --b3-menu-background: #1a1b26;
+  --b3-dialog-shadow: 0 8px 24px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(192, 202, 245, 0.1);
+  --b3-point-shadow: inset 0 0.5px 0.5px 0.5px rgba(255, 255, 255, 0.1),
+    0 3px 8px rgba(0, 0, 0, 0.3);
+  --b3-mask-background: rgba(12, 14, 20, 0.5);
+  --b3-protyle-code-background: rgba(192, 202, 245, 0.08);
+  --b3-protyle-inline-link-color: #7dcfff;
+  --b3-protyle-inline-mark-background: #e0af68;
+  --b3-protyle-inline-mark-color: #1a1b26;
+  --b3-protyle-inline-blockref-color: #bb9af7;
+  --b3-table-even-background: rgba(192, 202, 245, 0.05);
+  --b3-highlight-color: #1a1b26;
+  --b3-highlight-background: #e0af68;
+  --b3-selection-background: rgba(122, 162, 247, 0.3);
+  --b3-code-comment: #565f89;
+  --b3-code-keyword: #bb9af7;
+  --b3-code-string: #9ece6a;
+  --b3-code-number: #ff9e64;
+  --b3-code-title: #7aa2f7;
+  --b3-code-variable: #f7768e;
+  --b3-code-tag: #7dcfff;
+  --b3-code-meta: #565f89;
+  --b3-task-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%231a1b26' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+  --b3-heading-1: color-mix(in srgb, #bb9af7 82%, #1a1b26);
+  --b3-heading-2: color-mix(in srgb, #7aa2f7 82%, #1a1b26);
+  --b3-heading-3: color-mix(in srgb, #7dcfff 82%, #1a1b26);
+  --b3-heading-4: color-mix(in srgb, #9ece6a 82%, #1a1b26);
+  --b3-heading-5: color-mix(in srgb, #e0af68 82%, #1a1b26);
+  --b3-heading-6: color-mix(in srgb, #ff9e64 82%, #1a1b26);
+  --b3-list-marker: color-mix(in srgb, #7dcfff 86%, #1a1b26);
+  --b3-blockquote-border: color-mix(in srgb, #7aa2f7 86%, #1a1b26);
+  --b3-blockquote-background: rgba(122, 162, 247, 0.05);
+  --b3-table-header-background: rgba(122, 162, 247, 0.08);
+  --b3-table-border: #292e42;
+  --b3-hr-color: #292e42;
 }
 
 * {
@@ -132,7 +351,7 @@ select:focus-visible {
 }
 
 ::selection {
-  background: rgba(53, 117, 240, 0.22);
+  background: var(--b3-selection-background);
 }
 
 ::-webkit-scrollbar {

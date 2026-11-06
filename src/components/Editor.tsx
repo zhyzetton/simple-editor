@@ -18,6 +18,7 @@ import {useEffect, useMemo, useRef, useState} from "react";
 import {MathBlock, MathInline, insertMathNode} from "../editor/math";
 import {docToMarkdown, markdownToHTML} from "../editor/markdown";
 import {createSlashCommand} from "../editor/slash";
+import {FluidLastTableColumn} from "../editor/tableLayout";
 import {insertImageAt} from "../lib/insertImage";
 import {openExternal} from "../lib/links";
 import {
@@ -247,6 +248,9 @@ export function Editor({
         bold: false,
         italic: false,
         strike: false,
+        // 关掉自动补尾段落：否则文档以代码块/表格/列表结尾时，点大纲这种纯选区事务也会改动文档，
+        // 被脏检查误判成“编辑过”。需要空段落时用块手柄或 gap cursor。
+        trailingNode: false,
         link: {
           openOnClick: false,
           autolink: true,
@@ -260,7 +264,15 @@ export function Editor({
       LinkInput,
       TaskList,
       TaskItem.configure({nested: true}),
-      Table.configure({resizable: true, allowTableNodeSelection: true}),
+      Table.configure({
+        resizable: true,
+        allowTableNodeSelection: true,
+        // 和 CSS 里 th/td 的 min-width 对齐，否则列拖到最窄时边界和鼠标会错位
+        cellMinWidth: 40,
+        // 最外侧那条边只会改变整张表的宽度，不给手柄
+        lastColumnResizable: false,
+      }),
+      FluidLastTableColumn,
       TableRow,
       TableHeader,
       TableCell,

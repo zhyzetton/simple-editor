@@ -1,7 +1,9 @@
 import {convertFileSrc, invoke} from "@tauri-apps/api/core";
+import {listen} from "@tauri-apps/api/event";
 import {open as openDialog} from "@tauri-apps/plugin-dialog";
 import {revealItemInDir} from "@tauri-apps/plugin-opener";
 import welcomeMd from "../assets/welcome.md?raw";
+import type {SystemFont} from "./appearance";
 import type {
   EntryNode,
   ExternalFileDoc,
@@ -19,6 +21,30 @@ let assetBaseDir = "";
 
 export function isTauri(): boolean {
   return TAURI;
+}
+
+/** 读取系统已安装字体（仅桌面端），浏览器预览时返回空列表 */
+export async function listSystemFonts(): Promise<SystemFont[]> {
+  if (!TAURI) {
+    return [];
+  }
+  return invoke<SystemFont[]>("list_system_fonts");
+}
+
+/** 取回并清空随「打开方式 / 双击文件」传进来的文件路径 */
+export async function takeStartupFiles(): Promise<string[]> {
+  if (!TAURI) {
+    return [];
+  }
+  return invoke<string[]>("take_startup_files");
+}
+
+/** 订阅后续实例传来的文件路径 */
+export async function onFileOpen(handler: (path: string) => void): Promise<() => void> {
+  if (!TAURI) {
+    return () => {};
+  }
+  return listen<string>("file-open", (event) => handler(event.payload));
 }
 
 export function setAssetBaseDir(dir: string) {
@@ -223,12 +249,19 @@ export async function renameWorkspaceFile(path: string, newName: string): Promis
   return mockRenameWorkspaceFile(path, newName);
 }
 
-export async function deleteWorkspaceFile(path: string): Promise<void> {
+export async function deleteWorkspaceEntry(path: string): Promise<void> {
   if (TAURI) {
-    await invoke("delete_workspace_file", {path});
+    await invoke("delete_workspace_entry", {path});
     return;
   }
-  mockDeleteWorkspaceFile(path);
+  mockDeleteWorkspaceEntry(path);
+}
+
+export async function clearWorkspaceTrash(): Promise<number> {
+  if (TAURI) {
+    return invoke<number>("clear_workspace_trash");
+  }
+  return mockClearWorkspaceTrash();
 }
 
 export async function readExternalFile(path: string): Promise<ExternalFileDoc> {
@@ -531,14 +564,26 @@ function mockRenameWorkspaceFile(path: string, newName: string): FileMeta {
   };
 }
 
-function mockDeleteWorkspaceFile(path: string) {
+function mockDeleteWorkspaceEntry(path: string) {
   const store = loadMock();
-  if (!store.workspace.files[path]) {
+  const isInside = (item: string) => item === path || item.startsWith(`${path}/`);
+  const files = Object.keys(store.workspace.files).filter(isInside);
+  const folders = store.workspace.folders.filter(isInside);
+  if (files.length === 0 && folders.length === 0) {
     return;
   }
-  delete store.workspace.files[path];
+  files.forEach((item) => delete store.workspace.files[item]);
+  store.workspace.folders = store.workspace.folders.filter((item) => !isInside(item));
   store.workspace.trash.push(path);
   saveMock(store);
+}
+
+function mockClearWorkspaceTrash(): number {
+  const store = loadMock();
+  const removed = store.workspace.trash.length;
+  store.workspace.trash = [];
+  saveMock(store);
+  return removed;
 }
 
 function mockReadExternalFile(path: string): ExternalFileDoc {

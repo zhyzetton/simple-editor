@@ -36,7 +36,17 @@ export interface OpenDoc extends FileDoc {
 
 export type SaveState = "saved" | "saving" | "dirty";
 
-export type Theme = "light" | "dark";
+export interface DocSaver {
+  save: () => Promise<void>;
+  isDirty: () => boolean;
+}
+
+export type Theme =
+  | "light"
+  | "dark"
+  | "catppuccin-latte"
+  | "catppuccin-mocha"
+  | "tokyo-night";
 
 export interface OutlineItem {
   id: string;

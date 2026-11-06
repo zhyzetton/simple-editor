@@ -18,7 +18,8 @@
         "height": 840,
         "minWidth": 880,
         "minHeight": 560,
-        "center": true
+        "center": true,
+        "decorations": false
       }
     ],
     "security": {
@@ -35,6 +36,15 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "fileAssociations": [
+      {
+        "ext": ["md", "markdown"],
+        "name": "Markdown 文档",
+        "description": "Markdown 文档",
+        "mimeType": "text/markdown",
+        "role": "Editor"
+      }
+    ],
     "windows": {
       "wix": {
         "language": ["zh-CN"]
